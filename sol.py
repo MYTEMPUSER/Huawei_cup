@@ -4,22 +4,37 @@ import cv2
 
 image_size = 512
 INF = 100000000000000000
-part_size = 64
+part_size = 32
 
-def calc_mertic (image1, image2, side):
+dict_val = {}
+
+def delta(pix1, pix2):
+	if isinstance(pix1, tuple): 
+		return math.fabs(pix1[0] - pix2[0]) + \
+		   math.fabs(pix1[1] - pix2[1]) + \
+		   math.fabs(pix1[2] - pix2[2])
+	else:
+		return math.fabs(pix1 - pix2)
+
+def calc_mertic (image1, image2, ind1, ind2, side):
 	sum = 0
+	if (ind1, ind2, side) in dict_val:
+		return dict_val[(ind1, ind2, side)]
 	if side == 'lr':
 		for i in range(part_size):
-			if isinstance(image1[part_size - 1][i], tuple): 
-				sum += math.fabs(image1[part_size - 1][i][0] - image2[0][i][0] + image1[part_size - 1][i][1] - image2[0][i][1] + image1[part_size - 1][i][2] - image2[0][i][2])
-			else:
-				sum += math.fabs(image1[part_size - 1][i] - image2[0][i])
+			min_delta = INF
+			for d in [-1, 0, 1]:
+				if i + d > -1 and i + d < part_size:
+					min_delta = min(delta(image1[part_size - 1][i], image2[0][i + d]), min_delta)
+			sum += min_delta
 	else:
 		for i in range(part_size):
-			if isinstance(image1[i][part_size - 1], tuple): 
-				sum += math.fabs(image1[i][part_size - 1][0] - image2[i][0][0] + image1[i][part_size - 1][1] - image2[i][0][1] + image1[i][part_size - 1][2] - image2[i][0][2])
-			else:
-				sum += math.fabs(image1[i][part_size - 1] - image2[i][0])
+			min_delta = INF
+			for d in [-1, 0, 1]:
+				if i + d > -1 and i + d < part_size:
+					min_delta = min(delta(image1[i][part_size - 1], image2[i + d][0]), min_delta)
+			sum += min_delta
+	dict_val[(ind1, ind2, side)] = sum
 	return sum
 
 def split_image (part_size, image):
@@ -55,8 +70,7 @@ def solve(path, name):
 		used[image_start] = True
 		sum_var = 0
 		while len(used) != len(parts):
-			#print(len(used))
-			candidate = [INF, 0, 0, 0]
+			candidate = [INF, 0, 0, 0, 0]
 			for im in range(len(parts)):
 				if im not in used:
 					image = parts[im]
@@ -68,24 +82,43 @@ def solve(path, name):
 								pass
 							else:
 								neibour += 1
-								result += calc_mertic(parts[matrix[i - 1][j] - 1], image, "lr")
+								result += calc_mertic(parts[matrix[i - 1][j] - 1], image, matrix[i - 1][j], im + 1, "lr")
 
 							if matrix[i][j] != 0 or j - 1 == -1 or matrix[i][j - 1] == 0:
 								pass
 							else:
 								neibour += 1
-								result += calc_mertic(parts[matrix[i][j - 1] - 1], image, "tb")
+								result += calc_mertic(parts[matrix[i][j - 1] - 1], image, matrix[i][j - 1], im + 1, "tb")
+							
+							if matrix[i][j] != 0 or i + 1 == image_size // part_size or matrix[i + 1][j] == 0:
+								pass
+							else:
+								neibour += 1
+								result += calc_mertic(parts[im], parts[matrix[i + 1][j] - 1], im + 1, matrix[i + 1][j], "lr")
+
+							if matrix[i][j] != 0 or j + 1 == image_size // part_size or matrix[i][j + 1] == 0:
+								pass
+							else:
+								neibour += 1
+								result += calc_mertic(parts[im], parts[matrix[i][j + 1] - 1], im + 1, matrix[i][j + 1], "tb")
+
 							if neibour == 0:
 								result = INF
 							else:
 								result /= neibour
 	
 							if result < candidate[0]:
-								candidate = [result, im, i, j]
+								candidate = [result, im, i, j, neibour]
 			matrix[candidate[2]][candidate[3]] = candidate[1] + 1
-
 			used[candidate[1]] = True
-			sum_var += candidate[0]
+
+		for i in range(len(matrix)):
+			for j in range(len(matrix)):
+				if i != 0:
+					sum_var += calc_mertic(parts[matrix[i - 1][j] - 1], parts[matrix[i][j] - 1], matrix[i - 1][j], matrix[i][j], "lr")
+				if j != 0:
+					sum_var += calc_mertic(parts[matrix[i][j - 1] - 1], parts[matrix[i][j] - 1], matrix[i][j - 1], matrix[i][j], "tb")
+
 		print(image_start, ':', sum_var)
 		if sum_var < best:
 			res_matrix = matrix
@@ -110,8 +143,9 @@ def solve(path, name):
 
 from os import walk
 
-for (dirpath, dirnames, filenames) in walk("C:\\Users\\Igor\\Desktop\\Huawei\\data_test1_blank\\64"):
+for (dirpath, dirnames, filenames) in walk("C:\\Users\\Igor\\Desktop\\Huawei\\data_test1_blank\\32"):
 	for file in filenames:
+		dict_val = {}
 		print(dirpath + '\\' + file)
 		solve(dirpath + '\\' + file, file)
 
